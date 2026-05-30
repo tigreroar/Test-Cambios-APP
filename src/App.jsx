@@ -351,6 +351,141 @@ function InboxModal({ messages, onClose, onMarkAsRead }) {
   );
 }
 
+// --- LEAD PROSPECTOR COMPONENT ---
+const LeadProspector = ({ onLogActivity }) => {
+  const [leads, setLeads] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedEmailTpl, setSelectedEmailTpl] = useState(0);
+  const [selectedSmsTpl, setSelectedSmsTpl] = useState(0);
+
+  const emailTemplates = [
+    "Hi [Name], just checking in on your real estate goals. Let me know when you have 5 minutes to chat!",
+    "Hello [Name], some new properties matching your criteria just hit the market. Would you like to see them?",
+    "Hi [Name], are you still looking to buy/sell this year? I'm here to help."
+  ];
+
+  const smsTemplates = [
+    "Hi [Name], it's Carlos. Checking in on your home search. Free to chat today?",
+    "Hello [Name]! I have a quick update on the local market. Call me when you can.",
+    "Hi [Name], still thinking about real estate? Let's catch up this week."
+  ];
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n');
+      const parsedLeads = rows.slice(1).map(row => {
+        const cols = row.split(',');
+        if (cols.length >= 3) {
+          return {
+            name: cols[0]?.trim(),
+            phone: cols[1]?.trim(),
+            mail: cols[2]?.trim(),
+            type: cols[3]?.trim() || 'General',
+            date: cols[4]?.trim() || new Date().toLocaleDateString()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+      setLeads(parsedLeads);
+      setCurrentIndex(0);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < leads.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      alert("You've reached the end of your lead list!");
+    }
+  };
+
+  const currentLead = leads[currentIndex];
+
+  const formatMessage = (msg, name) => msg.replace('[Name]', name || 'there');
+
+  const executeAction = (type) => {
+    if (!currentLead) return;
+
+    if (type === 'call' && currentLead.phone) {
+      window.open(`tel:${currentLead.phone}`, '_self');
+      onLogActivity('conversations');
+    } else if (type === 'email' && currentLead.mail) {
+      const body = encodeURIComponent(formatMessage(emailTemplates[selectedEmailTpl], currentLead.name));
+      window.open(`mailto:${currentLead.mail}?subject=Real Estate Update&body=${body}`, '_self');
+      onLogActivity('followUpEmail');
+    } else if (type === 'sms' && currentLead.phone) {
+      const body = encodeURIComponent(formatMessage(smsTemplates[selectedSmsTpl], currentLead.name));
+      window.open(`sms:${currentLead.phone}?body=${body}`, '_self');
+      onLogActivity('texts');
+    }
+    
+    setTimeout(handleNext, 1000);
+  };
+
+  if (leads.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-6 border border-dashed border-amber-300 bg-amber-50/30 text-center mb-6 mt-4">
+        <h3 className="font-bold text-slate-800 mb-2">Power Dialer & Messenger</h3>
+        <p className="text-sm text-slate-500 mb-4">Upload a CSV file (Name, Phone, Email, Type, Date) to start prospecting automatically.</p>
+        <input type="file" accept=".csv" onChange={handleFileUpload} id="csv-upload" className="hidden" />
+        <label htmlFor="csv-upload" className="inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer hover:bg-slate-800 transition-colors">
+          <BookOpen size={16} /> Load Leads CSV
+        </label>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-3xl p-6 shadow-md border border-slate-200 mb-6 mt-4 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
+        <div className="h-full bg-amber-500 transition-all duration-300" style={{ width: `${((currentIndex + 1) / leads.length) * 100}%` }}></div>
+      </div>
+      
+      <div className="flex justify-between items-center mb-4 mt-2">
+        <span className="text-xs font-black text-amber-500 uppercase tracking-widest">Lead {currentIndex + 1} of {leads.length}</span>
+        <button onClick={handleNext} className="text-xs font-bold text-slate-500 hover:text-slate-900 bg-slate-100 px-3 py-1 rounded-lg">Skip Lead ⏭</button>
+      </div>
+
+      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-5">
+        <h2 className="text-xl font-black text-slate-900">{currentLead.name || 'Unknown Lead'}</h2>
+        <div className="flex flex-col gap-1 mt-2">
+          <span className="text-sm font-medium text-slate-600 flex items-center gap-2"><Phone size={14} className="text-slate-400"/> {currentLead.phone || 'No phone'}</span>
+          <span className="text-sm font-medium text-slate-600 flex items-center gap-2"><Mail size={14} className="text-slate-400"/> {currentLead.mail || 'No email'}</span>
+          <span className="text-[10px] uppercase font-bold text-slate-400 mt-1 tracking-wider">{currentLead.type} • Added {currentLead.date}</span>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <button onClick={() => executeAction('call')} disabled={!currentLead.phone} className="w-full bg-slate-900 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50">
+          <Phone size={18} /> Call Lead (+1 Point)
+        </button>
+
+        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-2 mb-2"><MessageSquare size={16} className="text-slate-500"/> <span className="font-bold text-sm">Send SMS (+1 Point)</span></div>
+          <select value={selectedSmsTpl} onChange={(e) => setSelectedSmsTpl(Number(e.target.value))} className="w-full text-xs p-2 mb-2 rounded-lg border border-slate-200 bg-white">
+            {smsTemplates.map((tpl, i) => <option key={i} value={i}>Template {i+1}: "{tpl.substring(0, 30)}..."</option>)}
+          </select>
+          <button onClick={() => executeAction('sms')} disabled={!currentLead.phone} className="w-full bg-white border border-slate-300 text-slate-800 font-bold py-2 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-sm transition-colors">Send SMS & Next</button>
+        </div>
+
+        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-2 mb-2"><Mail size={16} className="text-slate-500"/> <span className="font-bold text-sm">Send Email (+1 Point)</span></div>
+          <select value={selectedEmailTpl} onChange={(e) => setSelectedEmailTpl(Number(e.target.value))} className="w-full text-xs p-2 mb-2 rounded-lg border border-slate-200 bg-white">
+            {emailTemplates.map((tpl, i) => <option key={i} value={i}>Template {i+1}: "{tpl.substring(0, 30)}..."</option>)}
+          </select>
+          <button onClick={() => executeAction('email')} disabled={!currentLead.mail} className="w-full bg-white border border-slate-300 text-slate-800 font-bold py-2 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-sm transition-colors">Send Email & Next</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN APP COMPONENT ---
 export default function App() {
   const [activeUserId, setActiveUserId] = useState(null);
@@ -464,7 +599,6 @@ export default function App() {
     const transVal = merged.transactionCloseAddress?.trim() ? (merged.transactionClose || 0) : 0;
     const isReferralFilled = (merged.referralName && merged.referralName.trim() !== '') || (merged.referralPhone && merged.referralPhone.trim() !== '');
 
-    // CÁLCULO DE PUNTOS ACTUALIZADO
     const basePts = (merged.followUpEmail || 0) + (merged.texts || 0) + (merged.socialPosts || 0) + (merged.contactsAdded || 0);
     const fivePts = ((merged.conversations || 0) * 5);
     const twentyFivePts = ((merged.authorityAction || 0) * 25);
@@ -787,6 +921,10 @@ function TodayView({ dateStr, log, onSave, profile }) {
     document.body.removeChild(textArea);
   };
 
+  const handleLeadAction = (actionType) => {
+    onSave({ [actionType]: (data[actionType] || 0) + 1 });
+  };
+
   if (isWeekend(dateStr)) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-12 px-4">
@@ -845,9 +983,12 @@ function TodayView({ dateStr, log, onSave, profile }) {
         {percent >= 100 && <p className="text-amber-400 text-sm font-bold mt-4 flex items-center gap-1.5"><CheckCircle2 size={18} /> Incredible! You crushed it today.</p>}
       </div>
       
+      {/* LEAD PROSPECTOR COMPONENT INTEGRATED HERE */}
+      <LeadProspector onLogActivity={handleLeadAction} />
+
       <div className="space-y-4">
         
-        {/* NEW SECTION FOR CONVERSATIONS */}
+        {/* SECTION FOR CONVERSATIONS */}
         <div className="py-2 flex items-center gap-4">
           <div className="h-px bg-slate-200 flex-1"></div>
           <span className="text-xs font-black text-amber-500 uppercase tracking-widest">VALUE (5 POINTS EACH)</span>
@@ -856,7 +997,7 @@ function TodayView({ dateStr, log, onSave, profile }) {
 
         <CounterCard icon={Phone} title="Conversations" max={5} value={data.conversations || 0} onChange={(v) => onSave({ conversations: v })} />
 
-        {/* EXISTING 1 POINT SECTION */}
+        {/* 1 POINT SECTION */}
         <div className="py-4 flex items-center gap-4">
           <div className="h-px bg-slate-200 flex-1"></div>
           <span className="text-xs font-black text-amber-500 uppercase tracking-widest">VALUE (1 Point Each)</span>
@@ -868,7 +1009,7 @@ function TodayView({ dateStr, log, onSave, profile }) {
         <CounterCard icon={Share2} title="Social Posts" max={2} value={data.socialPosts || 0} onChange={(v) => onSave({ socialPosts: v })} />
         <CounterCard icon={BookOpen} title="Contacts Added to CRM" max={3} value={data.contactsAdded || 0} onChange={(v) => onSave({ contactsAdded: v })} />
         
-        {/* UPDATED 5 POINT EA SECTION */}
+        {/* 25 POINT EA SECTION */}
         <div className="py-4 flex items-center gap-4">
           <div className="h-px bg-slate-200 flex-1"></div>
           <span className="text-xs font-black text-amber-500 uppercase tracking-widest">VALUE (25 POINTS EA/ APPT)</span>
@@ -877,6 +1018,7 @@ function TodayView({ dateStr, log, onSave, profile }) {
 
         <CounterCard icon={UserPlus} title="Appointments Today" max={5} value={data.authorityAction || 0} onChange={(v) => onSave({ authorityAction: v })} />
 
+        {/* 10 PTS SECTION */}
         <div className="py-4 flex items-center gap-4">
           <div className="h-px bg-slate-200 flex-1"></div>
           <span className="text-xs font-black text-amber-500 uppercase tracking-widest">High Value (10 Pts/Ea)</span>
