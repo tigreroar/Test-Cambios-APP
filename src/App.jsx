@@ -354,8 +354,7 @@ function InboxModal({ messages, onClose, onMarkAsRead }) {
 }
 
 // --- NEW TAB: LEADS VIEW ---
-const LeadsView = ({ log, onSave, activeUserId }) => {
-  // Persistimos el estado en localStorage para que no se borre al abrir apps externas
+const LeadsView = ({ log, onSave, activeUserId, profile }) => {
   const [leads, setLeads] = useState(() => {
     const saved = localStorage.getItem(`agentCoach_leads_${activeUserId}`);
     return saved ? JSON.parse(saved) : [];
@@ -365,25 +364,49 @@ const LeadsView = ({ log, onSave, activeUserId }) => {
     return saved ? parseInt(saved, 10) : 0;
   });
   
-  const [selectedEmailTpl, setSelectedEmailTpl] = useState(0);
+  // States for Email and SMS Template Selection
+  const [selectedSmsCategory, setSelectedSmsCategory] = useState('Database');
   const [selectedSmsTpl, setSelectedSmsTpl] = useState(0);
+  const [selectedEmailTpl, setSelectedEmailTpl] = useState(0);
 
-  // Guardamos cambios automáticamente en localStorage
   useEffect(() => {
     localStorage.setItem(`agentCoach_leads_${activeUserId}`, JSON.stringify(leads));
     localStorage.setItem(`agentCoach_leadIndex_${activeUserId}`, currentIndex.toString());
   }, [leads, currentIndex, activeUserId]);
 
-  const emailTemplates = [
-    "Hi [Name], just checking in on your real estate goals. Let me know when you have 5 minutes to chat!",
-    "Hello [Name], some new properties matching your criteria just hit the market. Would you like to see them?",
-    "Hi [Name], are you still looking to buy/sell this year? I'm here to help."
-  ];
+  // Data for SMS
+  const smsCategories = {
+    Database: [
+      "Hi [Name], it's been a while since we've connected. How have you and the family been? What's new in your world?",
+      "Hi [Name], quick question: if you could change one thing about your home right now; without worrying about cost...what would it be?",
+      "Hi [Name], random question: If I could show you a way to build wealth through real estate without moving, would you be curious?"
+    ],
+    Spanish: [
+      "Hola [Nombre], pregunta rápida: si encontraras una casa que te encantara y el pago mensual fuera cómodo para tu presupuesto, ¿considerarías comprar este año?",
+      "Hola [Nombre], hace tiempo que no hablamos. ¿Qué es algo bueno o emocionante que te haya pasado este año?",
+      "Hola [Nombre], tengo curiosidad: si decidieras comprar una casa en los próximos 12 meses, ¿qué crees que sería tu mayor preocupación: el pago inicial, la mensualidad o encontrar la casa adecuada?"
+    ],
+    Sellers: [
+      "Hi [Name], if someone knocked on your door today and offered top dollar for your home, would you sell it or stay put?",
+      "Hi [Name], what do you think would need to happen for you to consider selling your home in the next 1-3 years?",
+      "Hi [Name], have you checked your home's value recently? Many homeowners are surprised by how much equity they've built over the last few years."
+    ]
+  };
 
-  const smsTemplates = [
-    "Hi [Name], it's Carlos. Checking in on your home search. Free to chat today?",
-    "Hello [Name]! I have a quick update on the local market. Call me when you can.",
-    "Hi [Name], still thinking about real estate? Let's catch up this week."
+  // Data for Email
+  const emailTemplates = [
+    {
+      subject: "Curious what you'd do...",
+      body: "Hi [Name],\n\nI was having a conversation today and it made me think of a question:\n\nIf someone offered you 20% more than you paid for your home, would you sell it?\nWhy or why not?\n\nJust hit reply. I'm curious to see how people think about it.\n\n– [Agent Name]"
+    },
+    {
+      subject: "Need your advice",
+      body: "Hi [Name],\n\nI need your opinion on something.\n\nA friend asked me:\n\"What's the biggest mistake people make when buying a home?\"\n\nI'm curious...\nWhat would YOUR answer be?\nJust reply with your thoughts.\n\n– [Agent Name]"
+    },
+    {
+      subject: "Looking back...",
+      body: "Hi [Name],\n\nQuick question.\nWhat's one financial decision you've made that you're really glad you made?\nCould be buying a house.\nCould be starting a business.\nCould be something completely different.\n\nHit reply and let me know.\nI'd love to hear it.\n\n– [Agent Name]"
+    }
   ];
 
   const handleFileUpload = (e) => {
@@ -438,26 +461,34 @@ const LeadsView = ({ log, onSave, activeUserId }) => {
   };
 
   const currentLead = leads[currentIndex];
-  const formatMessage = (msg, name) => msg.replace('[Name]', name || 'there');
+
+  const formatMessage = (msg, leadName, agentName) => {
+    return msg
+      .replaceAll(/\[Name\]/gi, leadName || 'there')
+      .replaceAll(/\[Nombre\]/gi, leadName || 'ahí')
+      .replaceAll(/\[Agent Name\]/gi, agentName || 'Agent');
+  };
 
   const executeAction = (type) => {
     if (!currentLead) return;
-    const currentData = log || {}; // Tomamos los datos de hoy
+    const currentData = log || {}; 
 
     if (type === 'call' && currentLead.phone) {
       window.open(`tel:${currentLead.phone}`, '_self');
       onSave({ conversations: (currentData.conversations || 0) + 1 });
     } else if (type === 'email' && currentLead.mail) {
-      const body = encodeURIComponent(formatMessage(emailTemplates[selectedEmailTpl], currentLead.name));
-      window.open(`mailto:${currentLead.mail}?subject=Real Estate Update&body=${body}`, '_self');
+      const tpl = emailTemplates[selectedEmailTpl];
+      const subject = encodeURIComponent(tpl.subject);
+      const body = encodeURIComponent(formatMessage(tpl.body, currentLead.name, profile?.name));
+      window.open(`mailto:${currentLead.mail}?subject=${subject}&body=${body}`, '_self');
       onSave({ followUpEmail: (currentData.followUpEmail || 0) + 1 });
     } else if (type === 'sms' && currentLead.phone) {
-      const body = encodeURIComponent(formatMessage(smsTemplates[selectedSmsTpl], currentLead.name));
+      const msg = smsCategories[selectedSmsCategory][selectedSmsTpl];
+      const body = encodeURIComponent(formatMessage(msg, currentLead.name, profile?.name));
       window.open(`sms:${currentLead.phone}?body=${body}`, '_self');
       onSave({ texts: (currentData.texts || 0) + 1 });
     }
     
-    // Le damos 1.5s antes de pasar de tarjeta para asegurar que la app externa se abra sin fallos
     setTimeout(handleNext, 1500);
   };
 
@@ -516,27 +547,61 @@ const LeadsView = ({ log, onSave, activeUserId }) => {
         </div>
 
         <div className="space-y-4">
+          {/* CALL SECTION */}
           <button onClick={() => executeAction('call')} disabled={!currentLead.phone} className="w-full bg-slate-900 text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50 transition-all shadow-md active:scale-95">
             <Phone size={18} /> Call Lead (+1 Point)
           </button>
 
+          {/* SMS SECTION */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><MessageSquare size={16} className="text-slate-500"/> <span className="font-bold text-sm text-slate-800">Send SMS (+1 Point)</span></div>
             </div>
-            <select value={selectedSmsTpl} onChange={(e) => setSelectedSmsTpl(Number(e.target.value))} className="w-full text-xs font-medium text-slate-700 p-3 mb-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-amber-400">
-              {smsTemplates.map((tpl, i) => <option key={i} value={i}>Template {i+1}: "{tpl.substring(0, 35)}..."</option>)}
-            </select>
+            
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <select 
+                value={selectedSmsCategory} 
+                onChange={(e) => { setSelectedSmsCategory(e.target.value); setSelectedSmsTpl(0); }} 
+                className="w-full text-xs font-bold text-slate-700 p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-amber-400"
+              >
+                {Object.keys(smsCategories).map(cat => <option key={cat} value={cat}>{cat} Category</option>)}
+              </select>
+              
+              <select 
+                value={selectedSmsTpl} 
+                onChange={(e) => setSelectedSmsTpl(Number(e.target.value))} 
+                className="w-full text-xs font-bold text-slate-700 p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-amber-400"
+              >
+                {smsCategories[selectedSmsCategory].map((_, i) => <option key={i} value={i}>Message {i+1}</option>)}
+              </select>
+            </div>
+
+            <div className="p-3 bg-white text-xs text-slate-600 rounded-xl border border-slate-200 mb-3 shadow-inner italic leading-relaxed">
+              "{formatMessage(smsCategories[selectedSmsCategory][selectedSmsTpl], currentLead.name, profile?.name)}"
+            </div>
+
             <button onClick={() => executeAction('sms')} disabled={!currentLead.phone} className="w-full bg-white border border-slate-300 text-slate-800 font-bold py-2.5 rounded-xl hover:bg-slate-100 disabled:opacity-50 text-sm transition-colors shadow-sm">
               Send SMS & Next
             </button>
           </div>
 
+          {/* EMAIL SECTION */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
             <div className="flex items-center gap-2 mb-3"><Mail size={16} className="text-slate-500"/> <span className="font-bold text-sm text-slate-800">Send Email (+1 Point)</span></div>
-            <select value={selectedEmailTpl} onChange={(e) => setSelectedEmailTpl(Number(e.target.value))} className="w-full text-xs font-medium text-slate-700 p-3 mb-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-amber-400">
-              {emailTemplates.map((tpl, i) => <option key={i} value={i}>Template {i+1}: "{tpl.substring(0, 35)}..."</option>)}
+            
+            <select 
+              value={selectedEmailTpl} 
+              onChange={(e) => setSelectedEmailTpl(Number(e.target.value))} 
+              className="w-full text-xs font-bold text-slate-700 p-2.5 mb-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-amber-400"
+            >
+              {emailTemplates.map((tpl, i) => <option key={i} value={i}>Subject: {tpl.subject}</option>)}
             </select>
+
+            <div className="p-3 bg-white text-xs text-slate-600 rounded-xl border border-slate-200 mb-3 shadow-inner whitespace-pre-wrap leading-relaxed">
+              <span className="font-bold block mb-1">Subject: {emailTemplates[selectedEmailTpl].subject}</span>
+              {formatMessage(emailTemplates[selectedEmailTpl].body, currentLead.name, profile?.name)}
+            </div>
+
             <button onClick={() => executeAction('email')} disabled={!currentLead.mail} className="w-full bg-white border border-slate-300 text-slate-800 font-bold py-2.5 rounded-xl hover:bg-slate-100 disabled:opacity-50 text-sm transition-colors shadow-sm">
               Send Email & Next
             </button>
@@ -768,7 +833,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-8 pt-4">
         <div className="max-w-md mx-auto p-4 space-y-6">
           {activeTab === 'today' && <TodayView dateStr={todayStr} log={myLogs.find(l => l.date === todayStr)} onSave={(updates) => handleSaveLog(todayStr, updates)} profile={profile} />}
-          {activeTab === 'leads' && <LeadsView log={myLogs.find(l => l.date === todayStr)} onSave={(updates) => handleSaveLog(todayStr, updates)} activeUserId={activeUserId} />}
+          {activeTab === 'leads' && <LeadsView log={myLogs.find(l => l.date === todayStr)} onSave={(updates) => handleSaveLog(todayStr, updates)} activeUserId={activeUserId} profile={profile} />}
           {activeTab === 'history' && <HistoryView logs={myLogs} onSaveLog={handleSaveLog} todayStr={todayStr} />}
           {activeTab === 'summary' && <SummaryView logs={myLogs} todayStr={todayStr} />}
           {activeTab === 'ranking' && <RankingView profiles={allProfiles} logs={logs} todayStr={todayStr} isAdmin={profile?.role === 'admin'} />}
