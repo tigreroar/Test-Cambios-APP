@@ -368,6 +368,7 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
   const [selectedSmsCategory, setSelectedSmsCategory] = useState('3-in-1 Contact Method');
   const [selectedSmsTpl, setSelectedSmsTpl] = useState(0);
   const [selectedEmailTpl, setSelectedEmailTpl] = useState(0);
+  const [showVmScript, setShowVmScript] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(`agentCoach_leads_${activeUserId}`, JSON.stringify(leads));
@@ -447,6 +448,7 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
   const handleNext = () => {
     if (currentIndex < leads.length - 1) {
       setCurrentIndex(prev => prev + 1);
+      setShowVmScript(false);
     } else {
       alert("You've reached the end of your lead list!");
     }
@@ -455,6 +457,7 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
   const handlePrev = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
+      setShowVmScript(false);
     }
   };
 
@@ -462,6 +465,7 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
     if(window.confirm("Are you sure you want to clear your current leads list?")) {
       setLeads([]);
       setCurrentIndex(0);
+      setShowVmScript(false);
       localStorage.removeItem(`agentCoach_leads_${activeUserId}`);
       localStorage.removeItem(`agentCoach_leadIndex_${activeUserId}`);
     }
@@ -489,14 +493,14 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
       const body = encodeURIComponent(formatMessage(tpl.body, currentLead.name, profile?.name));
       window.open(`mailto:${currentLead.mail}?subject=${subject}&body=${body}`, '_self');
       onSave({ followUpEmail: (currentData.followUpEmail || 0) + 1 });
+      setTimeout(handleNext, 1500);
     } else if (type === 'sms' && currentLead.phone) {
       const msg = smsCategories[selectedSmsCategory][selectedSmsTpl];
       const body = encodeURIComponent(formatMessage(msg, currentLead.name, profile?.name));
       window.open(`sms:${currentLead.phone}?body=${body}`, '_self');
       onSave({ texts: (currentData.texts || 0) + 1 });
+      setTimeout(handleNext, 1500);
     }
-    
-    setTimeout(handleNext, 1500);
   };
 
   if (leads.length === 0) {
@@ -555,9 +559,38 @@ const LeadsView = ({ log, onSave, activeUserId, profile }) => {
 
         <div className="space-y-4">
           {/* CALL SECTION */}
-          <button onClick={() => executeAction('call')} disabled={!currentLead.phone} className="w-full bg-slate-900 text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50 transition-all shadow-md active:scale-95">
-            <Phone size={18} /> Call Lead (+1 Point)
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => {
+                executeAction('call');
+                setShowVmScript(true);
+              }} 
+              disabled={!currentLead.phone} 
+              className="w-full bg-slate-900 text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50 transition-all shadow-md active:scale-95"
+            >
+              <Phone size={18} /> Call Lead (+1 Point)
+            </button>
+            
+            <div className="bg-amber-50/40 border border-amber-200 rounded-2xl p-4">
+              <button
+                type="button"
+                onClick={() => setShowVmScript(!showVmScript)}
+                className="w-full flex justify-between items-center text-xs font-black text-amber-600 uppercase tracking-wider"
+              >
+                <span>{showVmScript ? '👇 Hide Voicemail Script' : '📞 Show Voicemail Script (If no answer)'}</span>
+              </button>
+              
+              {showVmScript && (
+                <div className="mt-3 p-3 bg-white text-xs text-slate-700 rounded-xl border border-amber-100 shadow-inner italic leading-relaxed whitespace-pre-wrap animate-in fade-in slide-in-from-top-1 duration-200">
+                  "Hi <span className="font-bold text-slate-900">{currentLead.name || 'there'}</span>, it's <span className="font-bold text-slate-900">{profile?.name || 'Agent'}</span>.{"\n"}
+                  I came across something today that made me think of you.{"\n"}
+                  I'm not sure if it applies to your situation, but if it does, you'll probably want to know about it sooner rather than later.{"\n"}
+                  Give me a call when you get a chance.{"\n"}
+                  My number is <span className="font-bold text-slate-900">{profile?.phone || '[Your Phone]'}</span>."
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* SMS SECTION */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
